@@ -1,0 +1,1652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SyncPlay - Synchronized Audio Playback</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1f2937;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4b5563;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6b7280;
+        }
+
+        /* Pulse animation for sync indicator */
+        @keyframes pulse-green {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+            50% { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
+        }
+        @keyframes pulse-yellow {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.7); }
+            50% { box-shadow: 0 0 0 8px rgba(234, 179, 8, 0); }
+        }
+        @keyframes pulse-red {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+        }
+        
+        .sync-green { animation: pulse-green 2s infinite; }
+        .sync-yellow { animation: pulse-yellow 1s infinite; }
+        .sync-red { animation: pulse-red 0.5s infinite; }
+
+        /* Waveform visualization */
+        .waveform-bar {
+            transition: height 0.05s ease-out;
+        }
+
+        /* Room code display */
+        .room-code {
+            font-family: 'Courier New', monospace;
+            letter-spacing: 0.3em;
+        }
+
+        /* Loading spinner */
+        .spinner {
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Progress bar */
+        .progress-track {
+            background: linear-gradient(90deg, #3b82f6 var(--progress), #374151 var(--progress));
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <!-- ═══════════════════════════════════════════════════════════════════════════════ -->
+    <!-- LANDING VIEW -->
+    <!-- ═══════════════════════════════════════════════════════════════════════════════ -->
+    <div id="landingView" class="min-h-screen flex items-center justify-center p-4">
+        <div class="max-w-md w-full">
+            <!-- Logo & Title -->
+            <div class="text-center mb-10">
+                <div class="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl mb-4 shadow-lg shadow-blue-500/25">
+                    <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                    </svg>
+                </div>
+                <h1 class="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+                    SyncPlay
+                </h1>
+                <p class="text-gray-400 mt-2">Ultra-tight synchronized audio playback</p>
+            </div>
+
+            <!-- Action Cards -->
+            <div class="space-y-4">
+                <!-- Create Room Card -->
+                <button onclick="createRoom()" class="w-full p-6 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 rounded-xl transition-all duration-200 text-left group shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30">
+                    <div class="flex items-center gap-4">
+                        <div class="w-12 h-12 bg-white/10 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-xl font-semibold">Create Room</h3>
+                            <p class="text-blue-200 text-sm">Host a session and upload audio</p>
+                        </div>
+                    </div>
+                </button>
+
+                <!-- Divider -->
+                <div class="flex items-center gap-4 py-2">
+                    <div class="flex-1 h-px bg-gray-700"></div>
+                    <span class="text-gray-500 text-sm">or</span>
+                    <div class="flex-1 h-px bg-gray-700"></div>
+                </div>
+
+                <!-- Join Room Card -->
+                <div class="p-6 bg-gray-800 rounded-xl border border-gray-700">
+                    <h3 class="text-xl font-semibold mb-4">Join Room</h3>
+                    <div class="flex gap-3">
+                        <input 
+                            type="text" 
+                            id="roomCodeInput" 
+                            placeholder="Enter 6-digit code"
+                            maxlength="6"
+                            pattern="[0-9]*"
+                            inputmode="numeric"
+                            class="flex-1 px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-center text-xl tracking-widest font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                        <button onclick="joinRoom()" class="px-6 py-3 bg-purple-600 hover:bg-purple-500 rounded-lg transition-colors font-semibold">
+                            Join
+                        </button>
+                    </div>
+                    <p id="joinError" class="text-red-400 text-sm mt-2 hidden"></p>
+                </div>
+            </div>
+
+            <!-- Features -->
+            <div class="mt-10 grid grid-cols-3 gap-4 text-center text-sm">
+                <div class="p-3">
+                    <div class="text-2xl mb-1">⚡</div>
+                    <div class="text-gray-400">&lt;40ms sync</div>
+                </div>
+                <div class="p-3">
+                    <div class="text-2xl mb-1">📱</div>
+                    <div class="text-gray-400">Any device</div>
+                </div>
+                <div class="p-3">
+                    <div class="text-2xl mb-1">🔒</div>
+                    <div class="text-gray-400">No storage</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════════════ -->
+    <!-- HOST VIEW -->
+    <!-- ═══════════════════════════════════════════════════════════════════════════════ -->
+    <div id="hostView" class="hidden min-h-screen p-4 md:p-8">
+        <div class="max-w-4xl mx-auto">
+            <!-- Header -->
+            <div class="flex flex-wrap items-center justify-between gap-4 mb-8">
+                <div>
+                    <div class="text-sm text-gray-400 mb-1">Room Code</div>
+                    <div class="room-code text-4xl font-bold text-blue-400" id="hostRoomCode">------</div>
+                </div>
+                <div class="flex items-center gap-4">
+                    <div class="text-right">
+                        <div class="text-sm text-gray-400">Listeners</div>
+                        <div class="text-2xl font-bold" id="clientCount">0</div>
+                    </div>
+                    <button onclick="copyRoomCode()" class="p-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors" title="Copy room code">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Upload Section -->
+            <div id="uploadSection" class="mb-8">
+                <div 
+                    id="dropZone"
+                    class="border-2 border-dashed border-gray-600 rounded-xl p-10 text-center hover:border-blue-500 hover:bg-gray-800/50 transition-all cursor-pointer"
+                    onclick="document.getElementById('fileInput').click()"
+                >
+                    <input type="file" id="fileInput" accept=".mp3,.wav,.ogg,audio/*" class="hidden" onchange="handleFileSelect(event)">
+                    <svg class="w-12 h-12 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    <p class="text-lg font-medium mb-1">Drop audio file here or click to browse</p>
+                    <p class="text-sm text-gray-400">MP3, WAV, OGG • Max 100 MB</p>
+                </div>
+                
+                <!-- Upload Progress -->
+                <div id="uploadProgress" class="hidden mt-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <span id="uploadFileName" class="text-sm truncate"></span>
+                        <span id="uploadPercent" class="text-sm text-blue-400">0%</span>
+                    </div>
+                    <div class="h-2 bg-gray-700 rounded-full overflow-hidden">
+                        <div id="uploadProgressBar" class="h-full bg-blue-500 transition-all duration-200" style="width: 0%"></div>
+                    </div>
+                </div>
+                
+                <p id="uploadError" class="text-red-400 text-sm mt-2 hidden"></p>
+            </div>
+
+            <!-- Player Section -->
+            <div id="playerSection" class="hidden">
+                <!-- Now Playing -->
+                <div class="bg-gray-800 rounded-xl p-6 mb-6">
+                    <div class="flex items-center gap-4 mb-6">
+                        <div class="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                            </svg>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h3 id="audioTitle" class="text-lg font-semibold truncate">No audio loaded</h3>
+                            <p id="audioInfo" class="text-sm text-gray-400">--:-- / --:--</p>
+                        </div>
+                        <button onclick="document.getElementById('fileInput').click()" class="p-2 text-gray-400 hover:text-white transition-colors" title="Change audio">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Progress Bar -->
+                    <div class="mb-4">
+                        <div 
+                            id="progressBar" 
+                            class="h-2 bg-gray-700 rounded-full cursor-pointer overflow-hidden"
+                            onclick="handleSeekClick(event)"
+                        >
+                            <div id="progressFill" class="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-100" style="width: 0%"></div>
+                        </div>
+                        <div class="flex justify-between mt-2 text-sm text-gray-400">
+                            <span id="currentTime">0:00</span>
+                            <span id="duration">0:00</span>
+                        </div>
+                    </div>
+
+                    <!-- Controls -->
+                    <div class="flex items-center justify-center gap-4">
+                        <button onclick="seekRelative(-10)" class="p-3 text-gray-400 hover:text-white transition-colors" title="Back 10s">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.333 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z" />
+                            </svg>
+                        </button>
+                        
+                        <button id="playPauseBtn" onclick="togglePlayPause()" class="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center hover:scale-105 transition-transform shadow-lg shadow-blue-500/25">
+                            <svg id="playIcon" class="w-8 h-8 ml-1" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M8 5v14l11-7z"/>
+                            </svg>
+                            <svg id="pauseIcon" class="w-8 h-8 hidden" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                            </svg>
+                        </button>
+                        
+                        <button onclick="seekRelative(10)" class="p-3 text-gray-400 hover:text-white transition-colors" title="Forward 10s">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.933 12.8a1 1 0 000-1.6L6.6 7.2A1 1 0 005 8v8a1 1 0 001.6.8l5.333-4zM19.933 12.8a1 1 0 000-1.6l-5.333-4A1 1 0 0013 8v8a1 1 0 001.6.8l5.333-4z" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sync Status (Host) -->
+            <div class="bg-gray-800 rounded-xl p-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div id="hostSyncIndicator" class="w-3 h-3 rounded-full bg-green-500 sync-green"></div>
+                        <span class="text-sm text-gray-400">Sync Status</span>
+                    </div>
+                    <div class="text-right text-sm">
+                        <div class="text-gray-400">Latency: <span id="hostLatency" class="text-white">--</span> ms</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════════════ -->
+    <!-- CLIENT VIEW -->
+    <!-- ═══════════════════════════════════════════════════════════════════════════════ -->
+    <div id="clientView" class="hidden min-h-screen p-4 md:p-8">
+        <div class="max-w-4xl mx-auto">
+            <!-- Header -->
+            <div class="flex items-center justify-between mb-8">
+                <div>
+                    <div class="text-sm text-gray-400 mb-1">Connected to Room</div>
+                    <div class="room-code text-4xl font-bold text-purple-400" id="clientRoomCode">------</div>
+                </div>
+                <button onclick="leaveRoom()" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors text-sm">
+                    Leave Room
+                </button>
+            </div>
+
+            <!-- Loading State -->
+            <div id="clientLoading" class="text-center py-20">
+                <div class="spinner mx-auto mb-4"></div>
+                <p id="clientLoadingText" class="text-gray-400">Connecting to room...</p>
+            </div>
+
+            <!-- Waiting for Audio -->
+            <div id="waitingForAudio" class="hidden text-center py-20">
+                <svg class="w-16 h-16 mx-auto text-gray-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                </svg>
+                <p class="text-xl font-semibold mb-2">Waiting for host to upload audio</p>
+                <p class="text-gray-400">The session will begin shortly...</p>
+            </div>
+
+            <!-- Syncing State -->
+            <div id="syncingState" class="hidden text-center py-20">
+                <div class="spinner mx-auto mb-4"></div>
+                <p class="text-xl font-semibold mb-2">Syncing audio...</p>
+                <p id="syncingProgress" class="text-gray-400">Loading audio buffer...</p>
+            </div>
+
+            <!-- Client Player -->
+            <div id="clientPlayer" class="hidden">
+                <!-- Now Playing -->
+                <div class="bg-gray-800 rounded-xl p-6 mb-6">
+                    <div class="flex items-center gap-4 mb-6">
+                        <div class="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg flex items-center justify-center">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                            </svg>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h3 id="clientAudioTitle" class="text-lg font-semibold truncate">Loading...</h3>
+                            <p id="clientAudioInfo" class="text-sm text-gray-400">--:-- / --:--</p>
+                        </div>
+                        <div id="clientPlayState" class="px-3 py-1 bg-gray-700 rounded-full text-sm">
+                            Stopped
+                        </div>
+                    </div>
+
+                    <!-- Progress Bar (Read-only) -->
+                    <div class="mb-4">
+                        <div class="h-2 bg-gray-700 rounded-full overflow-hidden">
+                            <div id="clientProgressFill" class="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-100" style="width: 0%"></div>
+                        </div>
+                        <div class="flex justify-between mt-2 text-sm text-gray-400">
+                            <span id="clientCurrentTime">0:00</span>
+                            <span id="clientDuration">0:00</span>
+                        </div>
+                    </div>
+
+                    <!-- Visual indicator that client can't control -->
+                    <p class="text-center text-sm text-gray-500">Host controls playback</p>
+                </div>
+
+                <!-- Mobile Unlock Button -->
+                <div id="mobileUnlock" class="hidden bg-yellow-600/20 border border-yellow-600 rounded-xl p-4 mb-6 text-center">
+                    <p class="text-yellow-400 mb-3">Tap to enable audio playback</p>
+                    <button onclick="unlockAudio()" class="px-6 py-3 bg-yellow-600 hover:bg-yellow-500 rounded-lg font-semibold transition-colors">
+                        Enable Audio
+                    </button>
+                </div>
+            </div>
+
+            <!-- Sync Status (Client) -->
+            <div id="clientSyncStatus" class="hidden bg-gray-800 rounded-xl p-4">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                        <div class="flex items-center gap-2 mb-1">
+                            <div id="clientSyncIndicator" class="w-3 h-3 rounded-full bg-green-500 sync-green"></div>
+                            <span class="text-sm text-gray-400">Sync</span>
+                        </div>
+                        <div id="syncStatus" class="font-semibold">Synced</div>
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-400 mb-1">Latency</div>
+                        <div id="clientLatency" class="font-semibold">-- ms</div>
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-400 mb-1">Drift</div>
+                        <div id="clientDrift" class="font-semibold">-- ms</div>
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-400 mb-1">Clock Offset</div>
+                        <div id="clientOffset" class="font-semibold">-- ms</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════════════ -->
+    <!-- ERROR MODAL -->
+    <!-- ═══════════════════════════════════════════════════════════════════════════════ -->
+    <div id="errorModal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+        <div class="bg-gray-800 rounded-xl p-6 max-w-md w-full">
+            <div class="text-center">
+                <div class="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg class="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </div>
+                <h3 class="text-xl font-semibold mb-2" id="errorTitle">Error</h3>
+                <p class="text-gray-400 mb-6" id="errorMessage">Something went wrong.</p>
+                <button onclick="closeErrorModal()" class="px-6 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors">
+                    OK
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════════════ -->
+    <!-- TOAST NOTIFICATION -->
+    <!-- ═══════════════════════════════════════════════════════════════════════════════ -->
+    <div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 px-6 py-3 bg-gray-800 rounded-lg shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 z-50">
+        <span id="toastMessage"></span>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════════════ -->
+    <!-- JAVASCRIPT -->
+    <!-- ═══════════════════════════════════════════════════════════════════════════════ -->
+    <script>
+/**
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * SYNCHRONIZED AUDIO PLAYBACK CLIENT
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * 
+ * Sync Strategy Overview:
+ * 
+ * 1. CLOCK SYNCHRONIZATION
+ *    - Use NTP-style ping/pong to calculate server time offset
+ *    - Offset = ServerTime - (ClientTime + RTT/2)
+ *    - Take median of multiple samples to reduce jitter
+ *    - Re-sync continuously every 2 seconds
+ * 
+ * 2. PLAYBACK SCHEDULING
+ *    - Server sends playbackStartTime (when track position was 0)
+ *    - Client calculates: currentPosition = (localServerTime - playbackStartTime) / 1000
+ *    - Use AudioContext.currentTime for sample-accurate scheduling
+ * 
+ * 3. DRIFT CORRECTION
+ *    - Measure actual vs expected position every 1 second
+ *    - Small drift (<10ms): ignore
+ *    - Medium drift (10-40ms): adjust playbackRate slightly
+ *    - Large drift (>40ms): hard realignment
+ * 
+ * 4. LATE JOINER SYNC
+ *    - Server sends current position when joining
+ *    - Client loads audio, seeks to position, schedules play
+ */
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// STATE MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const state = {
+    // Connection
+    ws: null,
+    roomCode: null,
+    isHost: false,
+    connected: false,
+    
+    // Audio
+    audioContext: null,
+    audioBuffer: null,
+    sourceNode: null,
+    gainNode: null,
+    audioFileName: null,
+    audioDuration: 0,
+    audioReady: false,
+    audioUnlocked: false, // For mobile autoplay handling
+    
+    // Playback
+    isPlaying: false,
+    playbackStartTime: 0,    // Server timestamp when position was 0
+    currentPosition: 0,       // Current position in seconds
+    pausedAt: 0,
+    
+    // Clock Sync
+    serverTimeOffset: 0,      // How far ahead server clock is from client
+    clockSamples: [],         // Recent offset measurements
+    latency: 0,               // Current round-trip latency
+    lastSyncTime: 0,
+    
+    // Drift Correction
+    lastDriftCheck: 0,
+    currentDrift: 0,
+    playbackRate: 1.0,
+    
+    // Scheduling
+    scheduledStartTime: 0,    // AudioContext time when playback started
+    
+    // UI Update
+    uiUpdateInterval: null
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const CLOCK_SYNC_INTERVAL = 2000;     // Re-sync clock every 2 seconds
+const CLOCK_SAMPLE_COUNT = 5;         // Number of samples to average
+const DRIFT_CHECK_INTERVAL = 1000;    // Check drift every 1 second
+const DRIFT_THRESHOLD_IGNORE = 10;    // <10ms: no correction
+const DRIFT_THRESHOLD_SOFT = 40;      // 10-40ms: rate adjustment
+const DRIFT_THRESHOLD_HARD = 100;     // >100ms: hard realignment
+const RATE_ADJUST_FACTOR = 0.002;     // Playback rate adjustment per ms of drift
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INITIALIZATION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Initialize AudioContext
+ * Must be called after user interaction on mobile
+ */
+function initAudioContext() {
+    if (state.audioContext) {
+        // Resume if suspended (can happen on mobile)
+        if (state.audioContext.state === 'suspended') {
+            state.audioContext.resume().catch(e => console.warn('[Audio] Resume failed:', e));
+        }
+        return;
+    }
+    
+    try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) {
+            console.error('[Audio] AudioContext not supported');
+            showError('Browser Not Supported', 'Your browser does not support Web Audio API.');
+            return;
+        }
+        
+        state.audioContext = new AudioContextClass();
+        state.gainNode = state.audioContext.createGain();
+        state.gainNode.connect(state.audioContext.destination);
+        
+        // Resume immediately (for browsers that start suspended)
+        if (state.audioContext.state === 'suspended') {
+            state.audioContext.resume().catch(e => console.warn('[Audio] Initial resume failed:', e));
+        }
+        
+        console.log('[Audio] AudioContext initialized, sample rate:', state.audioContext.sampleRate, 'state:', state.audioContext.state);
+    } catch (e) {
+        console.error('[Audio] Failed to create AudioContext:', e);
+        showError('Audio Error', 'Failed to initialize audio system.');
+    }
+}
+
+/**
+ * Unlock audio for mobile browsers
+ * Requires user interaction
+ */
+function unlockAudio() {
+    initAudioContext();
+    
+    // Create and play a silent buffer to unlock audio
+    const buffer = state.audioContext.createBuffer(1, 1, 22050);
+    const source = state.audioContext.createBufferSource();
+    source.buffer = buffer;
+    source.connect(state.audioContext.destination);
+    source.start(0);
+    
+    // Resume if suspended
+    if (state.audioContext.state === 'suspended') {
+        state.audioContext.resume();
+    }
+    
+    state.audioUnlocked = true;
+    document.getElementById('mobileUnlock').classList.add('hidden');
+    
+    console.log('[Audio] Audio unlocked for mobile');
+    showToast('Audio enabled!');
+    
+    // If we have a pending play state, execute it now
+    if (state.isPlaying && !state.sourceNode) {
+        schedulePlayback(state.playbackStartTime);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// WEBSOCKET CONNECTION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Connect to WebSocket server and return a Promise
+ * Resolves when connected, rejects on error or timeout
+ */
+function connectWebSocket() {
+    return new Promise((resolve, reject) => {
+        // Close existing connection if any
+        if (state.ws) {
+            try {
+                state.ws.close();
+            } catch (e) {}
+            state.ws = null;
+        }
+        
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}`;
+        
+        console.log('[WS] Connecting to:', wsUrl);
+        
+        // Set a connection timeout
+        const timeout = setTimeout(() => {
+            if (!state.connected) {
+                console.error('[WS] Connection timeout');
+                reject(new Error('Connection timeout'));
+            }
+        }, 5000);
+        
+        try {
+            state.ws = new WebSocket(wsUrl);
+        } catch (e) {
+            clearTimeout(timeout);
+            reject(new Error('Failed to create WebSocket: ' + e.message));
+            return;
+        }
+        
+        state.ws.onopen = () => {
+            console.log('[WS] Connected successfully');
+            clearTimeout(timeout);
+            state.connected = true;
+            startClockSync();
+            resolve();
+        };
+        
+        state.ws.onmessage = (event) => {
+            try {
+                const message = JSON.parse(event.data);
+                handleServerMessage(message);
+            } catch (e) {
+                console.error('[WS] Failed to parse message:', e);
+            }
+        };
+        
+        state.ws.onclose = (event) => {
+            console.log('[WS] Disconnected, code:', event.code);
+            clearTimeout(timeout);
+            state.connected = false;
+            stopClockSync();
+            
+            // Only show error if we were already in a room
+            if (state.roomCode) {
+                if (state.isHost) {
+                    showError('Disconnected', 'Connection to server was lost.');
+                } else {
+                    showError('Disconnected', 'Connection to room was lost.');
+                }
+                resetToLanding();
+            }
+        };
+        
+        state.ws.onerror = (error) => {
+            console.error('[WS] Error:', error);
+            clearTimeout(timeout);
+            state.connected = false;
+            reject(new Error('WebSocket connection failed'));
+        };
+    });
+}
+
+function sendMessage(data) {
+    if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+        state.ws.send(JSON.stringify(data));
+        return true;
+    }
+    console.warn('[WS] Cannot send message, not connected');
+    return false;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SERVER MESSAGE HANDLERS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function handleServerMessage(message) {
+    console.log('[WS] Received:', message.type);
+    
+    switch (message.type) {
+        case 'roomCreated':
+            handleRoomCreated(message);
+            break;
+            
+        case 'roomJoined':
+            handleRoomJoined(message);
+            break;
+            
+        case 'pong':
+            handleClockPong(message);
+            break;
+            
+        case 'audioUploaded':
+            handleAudioUploaded(message);
+            break;
+            
+        case 'play':
+            handlePlayCommand(message);
+            break;
+            
+        case 'pause':
+            handlePauseCommand(message);
+            break;
+            
+        case 'seek':
+            handleSeekCommand(message);
+            break;
+            
+        case 'stateUpdate':
+            handleStateUpdate(message);
+            break;
+            
+        case 'clientJoined':
+            updateClientCount(message.clientCount);
+            break;
+            
+        case 'clientLeft':
+            updateClientCount(message.clientCount);
+            break;
+            
+        case 'roomDestroyed':
+            handleRoomDestroyed(message);
+            break;
+            
+        case 'error':
+            handleError(message);
+            break;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ROOM MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function createRoom() {
+    try {
+        // Initialize audio context (requires user interaction)
+        initAudioContext();
+        
+        // Show connecting state
+        showToast('Connecting...');
+        
+        // Connect to WebSocket server
+        await connectWebSocket();
+        
+        // Send create room message
+        console.log('[Room] Sending createRoom message');
+        sendMessage({ type: 'createRoom' });
+        
+    } catch (error) {
+        console.error('[Room] Failed to create room:', error);
+        showError('Connection Failed', 'Could not connect to server. Please try again.');
+    }
+}
+
+async function joinRoom() {
+    const input = document.getElementById('roomCodeInput');
+    const roomCode = input.value.trim();
+    
+    if (!/^\d{6}$/.test(roomCode)) {
+        document.getElementById('joinError').textContent = 'Please enter a valid 6-digit room code';
+        document.getElementById('joinError').classList.remove('hidden');
+        return;
+    }
+    
+    document.getElementById('joinError').classList.add('hidden');
+    
+    try {
+        // Initialize audio context (requires user interaction)
+        initAudioContext();
+        
+        // Show connecting state
+        showToast('Connecting...');
+        
+        // Connect to WebSocket server
+        await connectWebSocket();
+        
+        // Send join room message
+        console.log('[Room] Sending joinRoom message for room:', roomCode);
+        sendMessage({ type: 'joinRoom', roomCode: roomCode });
+        
+    } catch (error) {
+        console.error('[Room] Failed to join room:', error);
+        showError('Connection Failed', 'Could not connect to server. Please try again.');
+    }
+}
+
+function handleRoomCreated(message) {
+    state.roomCode = message.roomCode;
+    state.isHost = true;
+    
+    document.getElementById('hostRoomCode').textContent = message.roomCode;
+    showView('hostView');
+    
+    startUIUpdates();
+    showToast('Room created!');
+}
+
+function handleRoomJoined(message) {
+    state.roomCode = message.roomCode;
+    state.isHost = false;
+    
+    document.getElementById('clientRoomCode').textContent = message.roomCode;
+    showView('clientView');
+    
+    // Check for mobile and show unlock button if needed
+    if (!state.audioUnlocked && isMobile()) {
+        document.getElementById('mobileUnlock').classList.remove('hidden');
+    }
+    
+    if (message.hasAudio) {
+        // Room has audio - load it
+        loadAudioFromServer(message);
+    } else {
+        // Waiting for host to upload
+        document.getElementById('clientLoading').classList.add('hidden');
+        document.getElementById('waitingForAudio').classList.remove('hidden');
+    }
+    
+    startUIUpdates();
+}
+
+function handleRoomDestroyed(message) {
+    showError('Room Closed', message.message || 'The host has left the room.');
+    resetToLanding();
+}
+
+function leaveRoom() {
+    if (state.ws) {
+        state.ws.close();
+    }
+    resetToLanding();
+}
+
+function resetToLanding() {
+    // Stop all audio
+    stopAudio();
+    
+    // Clear state
+    state.roomCode = null;
+    state.isHost = false;
+    state.audioBuffer = null;
+    state.audioReady = false;
+    state.isPlaying = false;
+    
+    // Stop UI updates
+    stopUIUpdates();
+    stopClockSync();
+    
+    // Show landing
+    showView('landingView');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CLOCK SYNCHRONIZATION (NTP-STYLE)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+let clockSyncInterval = null;
+
+function startClockSync() {
+    // Initial sync
+    sendClockPing();
+    
+    // Continuous sync
+    clockSyncInterval = setInterval(() => {
+        sendClockPing();
+    }, CLOCK_SYNC_INTERVAL);
+}
+
+function stopClockSync() {
+    if (clockSyncInterval) {
+        clearInterval(clockSyncInterval);
+        clockSyncInterval = null;
+    }
+}
+
+function sendClockPing() {
+    if (!state.connected) return;
+    
+    sendMessage({
+        type: 'ping',
+        clientTime: performance.now()
+    });
+}
+
+/**
+ * Handle clock sync response from server
+ * 
+ * NTP-style calculation:
+ * - t0 = client send time (clientTime)
+ * - t1 = server receive/send time (serverTime)
+ * - t2 = client receive time (now)
+ * 
+ * Round-trip time (RTT) = t2 - t0
+ * Server time offset = t1 - (t0 + RTT/2)
+ *                    = t1 - t0 - RTT/2
+ *                    = t1 - (t0 + t2)/2
+ */
+function handleClockPong(message) {
+    const t0 = message.clientTime;
+    const t1 = message.serverTime;
+    const t2 = performance.now();
+    
+    // Calculate round-trip time
+    const rtt = t2 - t0;
+    
+    // Calculate offset using NTP formula
+    // Offset tells us how far ahead server time is from our local time
+    const offset = t1 - (t0 + rtt / 2);
+    
+    // Store sample
+    state.clockSamples.push({ offset, rtt, timestamp: t2 });
+    
+    // Keep only recent samples
+    if (state.clockSamples.length > CLOCK_SAMPLE_COUNT) {
+        state.clockSamples.shift();
+    }
+    
+    // Calculate median offset (more robust than mean)
+    const offsets = state.clockSamples.map(s => s.offset).sort((a, b) => a - b);
+    state.serverTimeOffset = offsets[Math.floor(offsets.length / 2)];
+    
+    // Update latency (use minimum RTT as it's closest to true latency)
+    const rtts = state.clockSamples.map(s => s.rtt);
+    state.latency = Math.min(...rtts);
+    
+    state.lastSyncTime = t2;
+    
+    // Update UI
+    updateLatencyDisplay();
+}
+
+/**
+ * Get current server time estimate
+ * Uses local performance.now() + calculated offset
+ */
+function getEstimatedServerTime() {
+    return performance.now() + state.serverTimeOffset;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AUDIO UPLOAD (HOST ONLY)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Drag and drop handlers
+document.addEventListener('DOMContentLoaded', () => {
+    const dropZone = document.getElementById('dropZone');
+    if (dropZone) {
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('border-blue-500', 'bg-gray-800/50');
+        });
+        
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('border-blue-500', 'bg-gray-800/50');
+        });
+        
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('border-blue-500', 'bg-gray-800/50');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                uploadFile(files[0]);
+            }
+        });
+    }
+    
+    // Handle enter key in room code input
+    const roomCodeInput = document.getElementById('roomCodeInput');
+    if (roomCodeInput) {
+        roomCodeInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                joinRoom();
+            }
+        });
+    }
+});
+
+function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (file) {
+        uploadFile(file);
+    }
+}
+
+async function uploadFile(file) {
+    // Validate file type
+    const validTypes = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp3', 'audio/wave'];
+    const validExtensions = /\.(mp3|wav|ogg)$/i;
+    
+    if (!validTypes.includes(file.type) && !file.name.match(validExtensions)) {
+        showError('Invalid File', 'Please upload an MP3, WAV, or OGG audio file.');
+        return;
+    }
+    
+    // Validate file size (100 MB)
+    if (file.size > 100 * 1024 * 1024) {
+        showError('File Too Large', 'Maximum file size is 100 MB.');
+        return;
+    }
+    
+    // Show progress UI
+    document.getElementById('uploadProgress').classList.remove('hidden');
+    document.getElementById('uploadFileName').textContent = file.name;
+    document.getElementById('uploadError').classList.add('hidden');
+    
+    const formData = new FormData();
+    formData.append('audio', file);
+    
+    try {
+        const xhr = new XMLHttpRequest();
+        
+        xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+                const percent = Math.round((e.loaded / e.total) * 100);
+                document.getElementById('uploadPercent').textContent = percent + '%';
+                document.getElementById('uploadProgressBar').style.width = percent + '%';
+            }
+        });
+        
+        xhr.onload = async () => {
+            if (xhr.status === 200) {
+                const response = JSON.parse(xhr.responseText);
+                state.audioFileName = response.fileName;
+                
+                // Load the audio for host playback
+                await loadAudioFromServer({ audioFileName: response.fileName });
+                
+                document.getElementById('uploadProgress').classList.add('hidden');
+                document.getElementById('playerSection').classList.remove('hidden');
+                showToast('Audio uploaded successfully!');
+            } else if (xhr.status === 413) {
+                showUploadError('File too large. Maximum size is 100 MB.');
+            } else {
+                const response = JSON.parse(xhr.responseText);
+                showUploadError(response.error || 'Upload failed');
+            }
+        };
+        
+        xhr.onerror = () => {
+            showUploadError('Upload failed. Please try again.');
+        };
+        
+        xhr.open('POST', `/upload/${state.roomCode}`);
+        xhr.send(formData);
+        
+    } catch (error) {
+        console.error('[Upload] Error:', error);
+        showUploadError('Upload failed: ' + error.message);
+    }
+}
+
+function showUploadError(message) {
+    document.getElementById('uploadProgress').classList.add('hidden');
+    document.getElementById('uploadError').textContent = message;
+    document.getElementById('uploadError').classList.remove('hidden');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AUDIO LOADING
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function loadAudioFromServer(message) {
+    if (!state.isHost) {
+        // Show syncing state for clients
+        document.getElementById('clientLoading').classList.add('hidden');
+        document.getElementById('waitingForAudio').classList.add('hidden');
+        document.getElementById('syncingState').classList.remove('hidden');
+        document.getElementById('syncingProgress').textContent = 'Downloading audio...';
+    }
+    
+    try {
+        // Fetch audio file
+        const response = await fetch(`/audio/${state.roomCode}`);
+        if (!response.ok) {
+            throw new Error('Failed to fetch audio');
+        }
+        
+        const arrayBuffer = await response.arrayBuffer();
+        
+        if (!state.isHost) {
+            document.getElementById('syncingProgress').textContent = 'Decoding audio...';
+        }
+        
+        // Decode audio
+        state.audioBuffer = await state.audioContext.decodeAudioData(arrayBuffer);
+        state.audioDuration = state.audioBuffer.duration;
+        state.audioFileName = message.audioFileName;
+        state.audioReady = true;
+        
+        console.log('[Audio] Loaded:', state.audioFileName, 'Duration:', state.audioDuration.toFixed(2) + 's');
+        
+        // Update UI
+        if (state.isHost) {
+            document.getElementById('audioTitle').textContent = state.audioFileName;
+            document.getElementById('duration').textContent = formatTime(state.audioDuration);
+            sendMessage({ type: 'setDuration', duration: state.audioDuration });
+        } else {
+            document.getElementById('clientAudioTitle').textContent = state.audioFileName;
+            document.getElementById('clientDuration').textContent = formatTime(state.audioDuration);
+            
+            // Hide syncing, show player
+            document.getElementById('syncingState').classList.add('hidden');
+            document.getElementById('clientPlayer').classList.remove('hidden');
+            document.getElementById('clientSyncStatus').classList.remove('hidden');
+            
+            // If playback was already in progress, sync to it
+            if (message.playbackState && message.playbackState.isPlaying) {
+                handlePlayCommand({
+                    serverTime: getEstimatedServerTime(),
+                    playbackStartTime: message.playbackState.playbackStartTime,
+                    startPosition: message.currentPosition
+                });
+            } else if (message.playbackState) {
+                state.pausedAt = message.playbackState.pausedAt || 0;
+                state.currentPosition = message.currentPosition || 0;
+            }
+        }
+        
+    } catch (error) {
+        console.error('[Audio] Load error:', error);
+        showError('Audio Error', 'Failed to load audio file.');
+    }
+}
+
+function handleAudioUploaded(message) {
+    // Called when host uploads new audio
+    state.audioFileName = message.fileName;
+    
+    if (!state.isHost) {
+        // Client needs to load the new audio
+        loadAudioFromServer(message);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PLAYBACK CONTROL (HOST)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function togglePlayPause() {
+    if (!state.audioReady) {
+        showToast('Please upload an audio file first');
+        return;
+    }
+    
+    if (state.isPlaying) {
+        sendMessage({ type: 'pause' });
+    } else {
+        sendMessage({ 
+            type: 'play',
+            position: state.pausedAt
+        });
+    }
+}
+
+function seekRelative(seconds) {
+    if (!state.audioReady) return;
+    
+    const newPosition = Math.max(0, Math.min(state.currentPosition + seconds, state.audioDuration));
+    
+    sendMessage({
+        type: 'seek',
+        position: newPosition
+    });
+}
+
+function handleSeekClick(event) {
+    if (!state.audioReady) return;
+    
+    const bar = event.currentTarget;
+    const rect = bar.getBoundingClientRect();
+    const percent = (event.clientX - rect.left) / rect.width;
+    const position = percent * state.audioDuration;
+    
+    sendMessage({
+        type: 'seek',
+        position: Math.max(0, Math.min(position, state.audioDuration))
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PLAYBACK COMMANDS FROM SERVER
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Handle play command from server
+ * 
+ * The server sends:
+ * - serverTime: when this message was sent
+ * - playbackStartTime: server timestamp when position 0 was "playing"
+ * - startPosition: where playback starts
+ * 
+ * We need to:
+ * 1. Calculate the local time equivalent of playbackStartTime
+ * 2. Figure out where we should be RIGHT NOW
+ * 3. Schedule playback to start at the correct position
+ */
+function handlePlayCommand(message) {
+    console.log('[Playback] Play command received', message);
+    
+    if (!state.audioReady) {
+        console.log('[Playback] Audio not ready, deferring play');
+        return;
+    }
+    
+    // Check mobile audio unlock
+    if (!state.audioUnlocked && isMobile() && !state.isHost) {
+        state.isPlaying = true;
+        state.playbackStartTime = message.playbackStartTime;
+        document.getElementById('mobileUnlock').classList.remove('hidden');
+        return;
+    }
+    
+    state.isPlaying = true;
+    state.playbackStartTime = message.playbackStartTime;
+    
+    schedulePlayback(message.playbackStartTime);
+    updatePlayPauseButton();
+}
+
+/**
+ * Schedule audio playback to sync with server
+ * 
+ * Key insight: We use AudioContext.currentTime for scheduling because
+ * it's sample-accurate. We map server time to AudioContext time.
+ */
+function schedulePlayback(playbackStartTime) {
+    // Stop any existing playback
+    stopAudio();
+    
+    // Ensure AudioContext is running
+    if (state.audioContext.state === 'suspended') {
+        state.audioContext.resume();
+    }
+    
+    // Calculate current position based on server time
+    const estimatedServerTime = getEstimatedServerTime();
+    const elapsedMs = estimatedServerTime - playbackStartTime;
+    const currentPosition = elapsedMs / 1000;
+    
+    console.log('[Playback] Scheduling:', {
+        estimatedServerTime,
+        playbackStartTime,
+        elapsedMs,
+        currentPosition: currentPosition.toFixed(3)
+    });
+    
+    // Check if we're past the end of the audio
+    if (currentPosition >= state.audioDuration) {
+        console.log('[Playback] Already past end of audio');
+        state.isPlaying = false;
+        state.currentPosition = state.audioDuration;
+        return;
+    }
+    
+    // Check if playback hasn't started yet (shouldn't happen but handle it)
+    if (currentPosition < 0) {
+        // Schedule to start in the future
+        const delaySeconds = Math.abs(currentPosition);
+        schedulePlaybackWithDelay(playbackStartTime, delaySeconds);
+        return;
+    }
+    
+    // Create new source
+    state.sourceNode = state.audioContext.createBufferSource();
+    state.sourceNode.buffer = state.audioBuffer;
+    state.sourceNode.connect(state.gainNode);
+    state.sourceNode.playbackRate.value = state.playbackRate;
+    
+    // Start playback at current position
+    state.sourceNode.start(0, currentPosition);
+    state.scheduledStartTime = state.audioContext.currentTime - currentPosition;
+    state.currentPosition = currentPosition;
+    
+    // Handle playback end
+    state.sourceNode.onended = () => {
+        if (state.isPlaying) {
+            state.isPlaying = false;
+            state.currentPosition = state.audioDuration;
+            updatePlayPauseButton();
+        }
+    };
+    
+    console.log('[Playback] Started at position:', currentPosition.toFixed(3));
+    
+    // Start drift correction
+    startDriftCorrection();
+}
+
+function schedulePlaybackWithDelay(playbackStartTime, delaySeconds) {
+    // Wait and then start
+    setTimeout(() => {
+        if (state.isPlaying) {
+            schedulePlayback(playbackStartTime);
+        }
+    }, delaySeconds * 1000);
+}
+
+function handlePauseCommand(message) {
+    console.log('[Playback] Pause command received', message);
+    
+    state.isPlaying = false;
+    state.pausedAt = message.pausePosition;
+    state.currentPosition = message.pausePosition;
+    
+    stopAudio();
+    stopDriftCorrection();
+    updatePlayPauseButton();
+}
+
+function handleSeekCommand(message) {
+    console.log('[Playback] Seek command received', message);
+    
+    state.currentPosition = message.seekPosition;
+    state.playbackStartTime = message.playbackStartTime;
+    
+    if (message.isPlaying) {
+        state.isPlaying = true;
+        schedulePlayback(message.playbackStartTime);
+    } else {
+        state.pausedAt = message.seekPosition;
+        stopAudio();
+    }
+    
+    updatePlayPauseButton();
+}
+
+function handleStateUpdate(message) {
+    // Used for re-syncing
+    if (message.playbackState.isPlaying && !state.isPlaying) {
+        handlePlayCommand({
+            serverTime: message.serverTime,
+            playbackStartTime: message.playbackState.playbackStartTime,
+            startPosition: message.currentPosition
+        });
+    } else if (!message.playbackState.isPlaying && state.isPlaying) {
+        handlePauseCommand({
+            pausePosition: message.playbackState.pausedAt
+        });
+    }
+}
+
+function stopAudio() {
+    if (state.sourceNode) {
+        try {
+            state.sourceNode.stop();
+            state.sourceNode.disconnect();
+        } catch (e) {
+            // Source might already be stopped
+        }
+        state.sourceNode = null;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DRIFT CORRECTION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+let driftCorrectionInterval = null;
+
+function startDriftCorrection() {
+    if (driftCorrectionInterval) return;
+    
+    driftCorrectionInterval = setInterval(() => {
+        if (!state.isPlaying || !state.sourceNode) return;
+        
+        checkAndCorrectDrift();
+    }, DRIFT_CHECK_INTERVAL);
+}
+
+function stopDriftCorrection() {
+    if (driftCorrectionInterval) {
+        clearInterval(driftCorrectionInterval);
+        driftCorrectionInterval = null;
+    }
+    
+    // Reset playback rate
+    if (state.sourceNode) {
+        state.sourceNode.playbackRate.value = 1.0;
+    }
+    state.playbackRate = 1.0;
+}
+
+/**
+ * Check current playback position against expected position
+ * and apply correction if needed
+ * 
+ * Drift = Actual Position - Expected Position
+ * Positive drift: we're ahead
+ * Negative drift: we're behind
+ */
+function checkAndCorrectDrift() {
+    if (!state.sourceNode || !state.isPlaying) return;
+    
+    // Calculate expected position based on server time
+    const estimatedServerTime = getEstimatedServerTime();
+    const expectedPosition = (estimatedServerTime - state.playbackStartTime) / 1000;
+    
+    // Calculate actual position based on AudioContext time
+    const actualPosition = (state.audioContext.currentTime - state.scheduledStartTime) * state.playbackRate;
+    
+    // Calculate drift in milliseconds
+    const driftMs = (actualPosition - expectedPosition) * 1000;
+    state.currentDrift = driftMs;
+    
+    // Update UI
+    updateSyncStatus(driftMs);
+    
+    // Apply correction based on drift magnitude
+    if (Math.abs(driftMs) < DRIFT_THRESHOLD_IGNORE) {
+        // Drift is acceptable, ensure normal playback rate
+        if (state.playbackRate !== 1.0) {
+            state.playbackRate = 1.0;
+            state.sourceNode.playbackRate.setValueAtTime(1.0, state.audioContext.currentTime);
+            console.log('[Drift] Restored normal rate, drift:', driftMs.toFixed(1) + 'ms');
+        }
+    } else if (Math.abs(driftMs) < DRIFT_THRESHOLD_SOFT) {
+        // Soft correction: adjust playback rate slightly
+        // If we're ahead (positive drift), slow down
+        // If we're behind (negative drift), speed up
+        const rateAdjustment = -driftMs * RATE_ADJUST_FACTOR;
+        const newRate = Math.max(0.99, Math.min(1.01, 1.0 + rateAdjustment));
+        
+        if (Math.abs(newRate - state.playbackRate) > 0.001) {
+            state.playbackRate = newRate;
+            state.sourceNode.playbackRate.setValueAtTime(newRate, state.audioContext.currentTime);
+            console.log('[Drift] Soft correction, rate:', newRate.toFixed(4), 'drift:', driftMs.toFixed(1) + 'ms');
+        }
+    } else if (Math.abs(driftMs) < DRIFT_THRESHOLD_HARD) {
+        // Medium correction: more aggressive rate adjustment
+        const rateAdjustment = -driftMs * RATE_ADJUST_FACTOR * 2;
+        const newRate = Math.max(0.98, Math.min(1.02, 1.0 + rateAdjustment));
+        
+        state.playbackRate = newRate;
+        state.sourceNode.playbackRate.setValueAtTime(newRate, state.audioContext.currentTime);
+        console.log('[Drift] Medium correction, rate:', newRate.toFixed(4), 'drift:', driftMs.toFixed(1) + 'ms');
+    } else {
+        // Hard correction: resync completely
+        console.log('[Drift] Hard realignment required, drift:', driftMs.toFixed(1) + 'ms');
+        state.playbackRate = 1.0;
+        schedulePlayback(state.playbackStartTime);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// UI UPDATES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function startUIUpdates() {
+    if (state.uiUpdateInterval) return;
+    
+    state.uiUpdateInterval = setInterval(() => {
+        updatePositionDisplay();
+    }, 100);
+}
+
+function stopUIUpdates() {
+    if (state.uiUpdateInterval) {
+        clearInterval(state.uiUpdateInterval);
+        state.uiUpdateInterval = null;
+    }
+}
+
+function updatePositionDisplay() {
+    if (!state.audioReady) return;
+    
+    let position;
+    if (state.isPlaying && state.sourceNode) {
+        position = (state.audioContext.currentTime - state.scheduledStartTime) * state.playbackRate;
+    } else {
+        position = state.pausedAt || state.currentPosition || 0;
+    }
+    
+    // Clamp position
+    position = Math.max(0, Math.min(position, state.audioDuration));
+    state.currentPosition = position;
+    
+    // Calculate progress percentage
+    const progress = (position / state.audioDuration) * 100;
+    
+    if (state.isHost) {
+        document.getElementById('currentTime').textContent = formatTime(position);
+        document.getElementById('progressFill').style.width = progress + '%';
+        document.getElementById('audioInfo').textContent = `${formatTime(position)} / ${formatTime(state.audioDuration)}`;
+    } else {
+        document.getElementById('clientCurrentTime').textContent = formatTime(position);
+        document.getElementById('clientProgressFill').style.width = progress + '%';
+        document.getElementById('clientAudioInfo').textContent = `${formatTime(position)} / ${formatTime(state.audioDuration)}`;
+        
+        // Update play state indicator
+        const playState = document.getElementById('clientPlayState');
+        if (state.isPlaying) {
+            playState.textContent = 'Playing';
+            playState.classList.remove('bg-gray-700');
+            playState.classList.add('bg-green-600');
+        } else {
+            playState.textContent = 'Paused';
+            playState.classList.remove('bg-green-600');
+            playState.classList.add('bg-gray-700');
+        }
+    }
+}
+
+function updatePlayPauseButton() {
+    const playIcon = document.getElementById('playIcon');
+    const pauseIcon = document.getElementById('pauseIcon');
+    
+    if (state.isPlaying) {
+        playIcon.classList.add('hidden');
+        pauseIcon.classList.remove('hidden');
+    } else {
+        playIcon.classList.remove('hidden');
+        pauseIcon.classList.add('hidden');
+    }
+}
+
+function updateClientCount(count) {
+    document.getElementById('clientCount').textContent = count;
+}
+
+function updateLatencyDisplay() {
+    const latencyMs = Math.round(state.latency);
+    
+    if (state.isHost) {
+        document.getElementById('hostLatency').textContent = latencyMs;
+    } else {
+        document.getElementById('clientLatency').textContent = latencyMs + ' ms';
+        document.getElementById('clientOffset').textContent = Math.round(state.serverTimeOffset) + ' ms';
+    }
+}
+
+function updateSyncStatus(driftMs) {
+    if (state.isHost) return;
+    
+    const indicator = document.getElementById('clientSyncIndicator');
+    const statusText = document.getElementById('syncStatus');
+    const driftText = document.getElementById('clientDrift');
+    
+    driftText.textContent = Math.round(driftMs) + ' ms';
+    
+    const absDrift = Math.abs(driftMs);
+    
+    if (absDrift < DRIFT_THRESHOLD_IGNORE) {
+        indicator.className = 'w-3 h-3 rounded-full bg-green-500 sync-green';
+        statusText.textContent = 'Synced';
+        statusText.className = 'font-semibold text-green-400';
+    } else if (absDrift < DRIFT_THRESHOLD_SOFT) {
+        indicator.className = 'w-3 h-3 rounded-full bg-yellow-500 sync-yellow';
+        statusText.textContent = 'Adjusting';
+        statusText.className = 'font-semibold text-yellow-400';
+    } else {
+        indicator.className = 'w-3 h-3 rounded-full bg-red-500 sync-red';
+        statusText.textContent = 'Re-syncing';
+        statusText.className = 'font-semibold text-red-400';
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// UTILITY FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function showView(viewId) {
+    document.getElementById('landingView').classList.add('hidden');
+    document.getElementById('hostView').classList.add('hidden');
+    document.getElementById('clientView').classList.add('hidden');
+    
+    document.getElementById(viewId).classList.remove('hidden');
+}
+
+function formatTime(seconds) {
+    if (!isFinite(seconds)) return '0:00';
+    
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+function isMobile() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
+
+function copyRoomCode() {
+    const code = state.roomCode;
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(code);
+        showToast('Room code copied!');
+    } else {
+        // Fallback
+        const input = document.createElement('input');
+        input.value = code;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        document.body.removeChild(input);
+        showToast('Room code copied!');
+    }
+}
+
+function showToast(message) {
+    const toast = document.getElementById('toast');
+    document.getElementById('toastMessage').textContent = message;
+    
+    toast.classList.remove('translate-y-20', 'opacity-0');
+    
+    setTimeout(() => {
+        toast.classList.add('translate-y-20', 'opacity-0');
+    }, 3000);
+}
+
+function showError(title, message) {
+    document.getElementById('errorTitle').textContent = title;
+    document.getElementById('errorMessage').textContent = message;
+    document.getElementById('errorModal').classList.remove('hidden');
+}
+
+function closeErrorModal() {
+    document.getElementById('errorModal').classList.add('hidden');
+}
+
+function handleError(message) {
+    if (message.message.includes('Room not found')) {
+        document.getElementById('joinError').textContent = message.message;
+        document.getElementById('joinError').classList.remove('hidden');
+    } else {
+        showError('Error', message.message);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// HANDLE PAGE UNLOAD
+// ═══════════════════════════════════════════════════════════════════════════════
+
+window.addEventListener('beforeunload', () => {
+    if (state.ws) {
+        state.ws.close();
+    }
+});
+
+// Handle visibility change (mobile tab switching)
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        // Page became visible, resync if playing
+        if (state.isPlaying && state.connected) {
+            console.log('[Visibility] Page visible, requesting state update');
+            sendMessage({ type: 'requestState' });
+        }
+    }
+});
+    </script>
+</body>
+</html>
