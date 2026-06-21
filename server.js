@@ -34,6 +34,7 @@ const PORT = process.env.PORT || 3000;
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB in bytes
 const TEMP_DIR = path.join(__dirname, 'temp');
 const ALLOWED_AUDIO_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp3', 'audio/wave'];
+const CORS_ORIGIN = process.env.CORS_ORIGIN || '*'; // Allow all origins by default for flexibility
 
 // Ensure temp directory exists
 if (!fs.existsSync(TEMP_DIR)) {
@@ -91,6 +92,20 @@ function getServerTime() {
 
 const app = express();
 const server = http.createServer(app);
+
+// CORS Configuration for cross-origin requests (e.g., from GitHub Pages)
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', CORS_ORIGIN);
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    
+    // Handle preflight requests
+    if (req.method === 'OPTIONS') {
+        res.sendStatus(200);
+    } else {
+        next();
+    }
+});
 
 // Serve static files
 app.use(express.static(__dirname));
@@ -256,7 +271,15 @@ app.get('/audio/:roomCode', (req, res) => {
 // WEBSOCKET SERVER
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocket.Server({ 
+    server,
+    // Allow WebSocket connections from any origin (CORS for WebSocket)
+    verifyClient: (info) => {
+        // In production, you might want to verify the origin here
+        // For now, allow all origins to work with GitHub Pages
+        return true;
+    }
+});
 
 wss.on('connection', (ws) => {
     // Assign unique ID to this connection
