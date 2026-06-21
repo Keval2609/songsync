@@ -2,17 +2,29 @@
 
 A production-quality browser-based system for synchronized audio playback across multiple devices. Features <40ms sync accuracy under good network conditions, late joiner auto-sync, and automatic drift correction.
 
+## 🚀 Quick Links
+
+- 📖 **[Deployment Guide](DEPLOYMENT.md)** - Deploy to GitHub Pages and cloud backends
+- 🌐 **Live Demo** - Coming soon (deploy your own instance)
+- 📱 **[Local Development](#-run-instructions)** - Run locally for testing
+
 ## 📁 Folder Structure
 
 ```
 sync-audio-player/
-├── package.json          # Node.js dependencies
-├── server.js             # Backend server (Express + WebSocket)
-├── index.html            # Frontend client (HTML + CSS + JS)
-├── README.md             # This file
-└── temp/                 # Auto-created for temporary audio storage
-    └── [roomCode]/       # Room-specific directories
-        └── audio-*.mp3   # Uploaded audio files (auto-deleted)
+├── package.json             # Node.js dependencies
+├── server.js                # Backend server (Express + WebSocket)
+├── index.html               # Frontend client (HTML + CSS + JS)
+├── docs/                    # Frontend for GitHub Pages deployment
+│   └── index.html           # Deployed frontend
+├── .env.example             # Environment configuration template
+├── .github/workflows/       # GitHub Actions CI/CD
+│   └── deploy.yml           # Automatic GitHub Pages deployment
+├── DEPLOYMENT.md            # Complete deployment guide
+├── README.md                # This file
+└── temp/                    # Auto-created for temporary audio storage
+    └── [roomCode]/          # Room-specific directories
+        └── audio-*.mp3      # Uploaded audio files (auto-deleted)
 ```
 
 ## 🚀 Run Instructions
@@ -58,6 +70,38 @@ npm start
 2. Click "Join"
 3. Wait for audio to load and sync
 4. On mobile: tap "Enable Audio" when prompted
+
+## 🌐 Deployment
+
+SyncPlay can be deployed in multiple ways:
+
+### Quick Start: GitHub Pages + Cloud Backend
+
+1. **Frontend** (GitHub Pages):
+   - Automatically deployed from `docs/` folder via GitHub Actions
+   - No additional setup needed - just push to `main`
+   - Visit: `https://your-username.github.io/songsync`
+
+2. **Backend** (Choose one):
+   - [Render](https://render.com) (Recommended - Free tier available)
+   - [Railway](https://railway.app)
+   - [Fly.io](https://fly.io)
+   - Your own server
+
+3. **Configuration:**
+   - Click ⚙️ **Settings** in the app
+   - Enter your backend server URL
+   - Click **Save**
+
+👉 **[See Full Deployment Guide →](DEPLOYMENT.md)**
+
+### Local Development
+
+```bash
+npm install
+npm start
+# Opens http://localhost:3000
+```
 
 ## 🔧 Technical Architecture
 
